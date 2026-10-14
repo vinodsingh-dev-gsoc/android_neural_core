@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Prevent browser from caching this page (forces fresh load every time) -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Location Dashboard</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css?v=1"
+        integrity="sha256-a7837102824184820dfa198d1ebcd109ff6d0ff9a2672a074b9a1b4d147d04c6"
+        crossorigin="anonymous">
+
+  <!-- Leaflet MarkerCluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css?v=1"
+        integrity="sha256-614dea0a98ff3f4ead74f04918f6b1d1b9ba435c25b5fc23b21a394d1e3e4d87"
+        crossorigin="anonymous">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css?v=1"
+        integrity="sha256-61258232d98d64dc2a7b1e02130d67421bc5b9bda5994eef70228ff97570c170"
+        crossorigin="anonymous">
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #f5f5f5;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    .stats {
+      display: flex;
+      gap: 24px;
+      font-size: 14px;
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .stat-label {
+      opacity: 0.8;
+      font-size: 12px;
+    }
+
+    /* Main Layout */
+    .main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Map Container */
+    #map {
+      flex: 1;
+      height: 100%;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 320px;
+      background: white;
+      border-left: 1px solid #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid #e0e0e0;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .location-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .location-item {
+      padding: 12px;
+      margin-bottom: 8px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .location-item:hover {
+      background: #e3f2fd;
+      transform: translateX(4px);
+    }
+
+    .location-coords {
+      font-weight: 600;
+      color: #1976d2;
+      font-size: 14px;
+    }
+
+    .location-time {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    .location-altitude {
+      font-size: 12px;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    /* Loading State */
+    .loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #666;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Auto-refresh indicator */
+    .refresh-indicator {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 260px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <h1>📍 Location Dashboard</h1>
+    <div class="stats">
+      <div class="stat-item">
+        <span class="stat-value" id="total-count">-</span>
+        <span class="stat-label">Total Locations</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value" id="last-update">-</span>
+        <span class="stat-label">Last Update</span>
+      </div>
+      <div class="stat-item">
+        <span class="refresh-indicator" id="refresh-status">⏳ Loading...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main">
+    <!-- Map -->
+    <div id="map"></div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">Recent Locations</div>
+      <div class="location-list" id="location-list">
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>Fetching locations...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dependencies -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js?v=1"
+          integrity="sha256-db49d009c841f5ca34a888c96511ae936fd9f5533e90d8b2c4d57596f4e5641a"
+          crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js?v=1"
+          integrity="sha256-1e4e1d22972a3926f48598e0caf14e3fe7049835d428a344fed4f9e3665b3508"
+          crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js?v=1"
+          integrity="sha256-36d1ad9948fdbba9c3d696e27050f70aafce88981938b6a814a6ad8abdf171ba"
+          crossorigin="anonymous"></script>
+
+  <script>
+    // ============================================================
+    // SUPABASE CONFIGURATION
+    // ============================================================
+    const SUPABASE_URL = 'https://tbxfdqpmfkywcyyhrqxm.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRieGZkcXBtZmt5d2N5eWhycXhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4MTQwMjksImV4cCI6MjEwNzM5MDAyOX0.n6zytI-hGTM2vUdUoNFVQaMSfKp62TPn0Q1EMbkVxqU';
+
+    // Initialize Supabase client.
+    // NOTE: the supabase-js UMD global is named `supabase`; our client is
+    // stored in a separate variable to avoid a "Identifier already declared"
+    // SyntaxError that crashed the whole script.
+    const { createClient } = supabase;
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // ============================================================
+    // MAP INITIALIZATION
+    // ============================================================
+    const map = L.map('map').setView([20.5937, 78.9629], 5); // Center on India by default
+
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(map);
+
+    // Create marker cluster group
+    const markers = L.markerClusterGroup({
+      maxClusterRadius: 50,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true
+    });
+    map.addLayer(markers);
+
+    // ============================================================
+    // DATA FETCHING
+    // ============================================================
+    let allLocations = [];
+
+    async function fetchLocations() {
+      try {
+        // Fetch last 500 locations ordered by newest first
+        const { data, error } = await supabaseClient
+          .from('locations')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(500);
+
+        if (error) {
+          console.error('Supabase error:', error);
+          document.getElementById('refresh-status').textContent = '❌ Error';
+          return;
+        }
+
+        allLocations = data || [];
+        updateStats();
+        updateMap(allLocations);
+        updateList(allLocations);
+        document.getElementById('refresh-status').textContent = '✓ Updated';
+      } catch (err) {
+        console.error('Fetch error:', err);
+        document.getElementById('refresh-status').textContent = '❌ Error';
+      }
+    }
+
+    // ============================================================
+    // UI UPDATES
+    // ============================================================
+    function updateStats() {
+      document.getElementById('total-count').textContent = allLocations.length;
+      const now = new Date();
+      document.getElementById('last-update').textContent = now.toLocaleTimeString();
+    }
+
+    function updateMap(locations) {
+      // Clear existing markers
+      markers.clearLayers();
+
+      if (locations.length === 0) {
+        // Show message if no locations
+        L.popup()
+          .setLatLng(map.getCenter())
+          .setContent('<div style="text-align:center;padding:10px;">No locations yet.<br>Start tracking to see data here!</div>')
+          .openOn(map);
+        return;
+      }
+
+      // Add markers for each location
+      locations.forEach(loc => {
+        const lat = parseFloat(loc.lat);
+        const lng = parseFloat(loc.lon);
+        const time = new Date(loc.created_at).toLocaleString();
+        const altitude = loc.altitude ? `${loc.altitude.toFixed(0)}m` : '';
+
+        const marker = L.marker([lat, lng])
+          .bindPopup(`
+            <div style="min-width:150px;">
+              <strong>📍 Location</strong><br>
+              <b>Lat:</b> ${lat.toFixed(6)}<br>
+              <b>Lng:</b> ${lng.toFixed(6)}<br>
+              ${altitude ? `<b>Alt:</b> ${altitude}<br>` : ''}
+              <b>Time:</b> ${time}
+            </div>
+          `);
+
+        markers.addLayer(marker);
+      });
+
+      // Fit map to show all markers
+      if (locations.length > 0) {
+        const bounds = L.latLngBounds(locations.map(loc => [parseFloat(loc.lat), parseFloat(loc.lon)]));
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+
+    function updateList(locations) {
+      const listContainer = document.getElementById('location-list');
+
+      if (locations.length === 0) {
+        listContainer.innerHTML = '<div style="padding:20px;text-align:center;color:#999;">No locations yet</div>';
+        return;
+      }
+
+      listContainer.innerHTML = locations.slice(0, 100).map((loc, index) => {
+        const lat = parseFloat(loc.lat).toFixed(6);
+        const lng = parseFloat(loc.lon).toFixed(6);
+        const time = new Date(loc.created_at).toLocaleString();
+        const altitude = loc.altitude ? `${loc.altitude.toFixed(0)}m` : '';
+
+        return `
+          <div class="location-item" onclick="focusLocation(${loc.lat}, ${loc.lon})">
+            <div class="location-coords">${lat}, ${lng}</div>
+            <div class="location-time">${time}</div>
+            ${altitude ? `<div class="location-altitude">Altitude: ${altitude}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ============================================================
+    // INTERACTIONS
+    // ============================================================
+    function focusLocation(lat, lng) {
+      map.setView([lat, lng], 15);
+      // Find and open popup for this marker
+      markers.eachLayer(marker => {
+        const markerLat = marker.getLatLng().lat;
+        const markerLng = marker.getLatLng().lng;
+        if (Math.abs(markerLat - lat) < 0.0001 && Math.abs(markerLng - lng) < 0.0001) {
+          marker.openPopup();
+        }
+      });
+    }
+
+    // ============================================================
+    // AUTO-REFRESH
+    // ============================================================
+    function startPolling() {
+      // Initial fetch
+      fetchLocations();
+
+      // Poll every 30 seconds
+      setInterval(fetchLocations, 30000);
+    }
+
+    // Start the dashboard
+    startPolling();
+  </script>
+</body>
+</html>
